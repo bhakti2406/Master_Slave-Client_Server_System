@@ -57,12 +57,12 @@ class Operations(object):
         return str1
 
 # Running daemon on localhost
-daemon = Pyro4.Daemon(host="10.200.19.168")
+daemon = Pyro4.Daemon(host="10.0.2.15")
 obj = Operations()
 uri = daemon.register(obj)
 print(uri)
 # Locating nameserver running on different PC
-ns = Pyro4.locateNS('10.200.19.168')
+ns = Pyro4.locateNS('10.0.2.15')
 # Registering the object on nameserver 
 ns.register('slave1', uri)
 print("Ready!")
