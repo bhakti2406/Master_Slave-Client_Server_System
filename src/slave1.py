@@ -1,69 +1,63 @@
-# Pyro enables code to call methods on objects even if that object is running on a remote machine
 import Pyro4
 import psutil
+
 
 def convertTime(seconds):
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
     return "%d:%02d:%02d" % (hours, minutes, seconds)
 
-# Exposing classes, methods and properties is done using the @Pyro4.expose decorator
+
 @Pyro4.expose
 class Operations(object):
-    # This is a normal Python object but it is registered with Pyro so that you can access it remotely. 
-    # Pyro objects are written just as any other object but the fact that Pyro knows something about them makes them special, 
-    # in the way that you can call methods on them from other programs. A class can also be a Pyro object, 
-    # but then you will also have to tell Pyro about how it should create actual objects from that class when handling remote calls.
-
-    # Get status of slaves
 
     def getStatus(self):
-        msg=psutil.sensors_battery()
-        msg1=convertTime(msg.secsleft)
-        msg2=msg.percent
-        msg3=msg.power_plugged
-        msg4=str(str(msg1)+" "+str(msg2)+" "+str(msg3))
-        return msg4
-    
-    # Getting words from master and counting frequency of every words.
+        msg = psutil.sensors_battery()
+        if msg is None:
+            return "Battery info unavailable"
+        msg1 = convertTime(msg.secsleft) if msg.secsleft != psutil.POWER_TIME_UNLIMITED else "Charging"
+        msg2 = msg.percent
+        msg3 = msg.power_plugged
+        return f"{msg1} {msg2}% plugged={msg3}"
 
     def getMap(self, words):
-        dic={}
-        print(words)
+        dic = {}
+        print("Received words:", words)
         for i in words:
-            if i in dic:
-                dic[i.lower()]+=1
-            else:
-                dic[i.lower()]=1
-        st = ""
-        for key, val in dic.items():
-            st=st+str(str(key)+":"+str(val))+" "
-        return st
+            key = i.lower()
+            dic[key] = dic.get(key, 0) + 1
 
-    # Doing Matrix mmultiplication of small portions given by master
+        return " ".join([f"{k}:{v}" for k, v in dic.items()])
 
     def matmul(self, a, b):
-        print(a)
-        print(b)
+        print("Row:", a)
+        print("Matrix:", b)
+
         result = [0] * len(b[0])
         for i in range(len(a)):
             for k in range(len(b[0])):
                 result[k] += a[i] * b[i][k]
-        str1 = ""
-        for i in range(len(result)):
-            str1 += str(result[i])
-            if i != len(result) - 1:
-                str1 += " "
-        return str1
 
-# Running daemon on localhost
-daemon = Pyro4.Daemon(host="10.0.2.15")
-obj = Operations()
-uri = daemon.register(obj)
-print(uri)
-# Locating nameserver running on different PC
-ns = Pyro4.locateNS('10.0.2.15')
-# Registering the object on nameserver 
-ns.register('slave1', uri)
-print("Ready!")
-daemon.requestLoop()
+        return " ".join(map(str, result))
+
+
+if __name__ == "__main__":
+    print("Starting Slave1 service...")
+
+    # Slave listens locally for Pyro
+    daemon = Pyro4.Daemon(host="127.0.0.1")
+    obj = Operations()
+    uri = daemon.register(obj)
+
+    print(f"Slave1 URI: {uri}")
+
+    try:
+        ns = Pyro4.locateNS("127.0.0.1")
+        ns.register("slave1", uri)
+        print("Slave1 registered successfully with nameserver.")
+    except Exception as e:
+        print("Failed to connect to NameServer:", e)
+        exit(1)
+
+    print("Slave1 ready and waiting for tasks.")
+    daemon.requestLoop()
